@@ -18,6 +18,9 @@ class ValidatorOutput(BaseModel):
 class TechQuestionsOutput(BaseModel):
     questions: List[str]
 
+class FinalStoryOutput (BaseModel):
+    story: str = Field(description="The fully synthesized Jira Agile Story")
+
 # ---------------------------------------------------------
 # LangGraph State
 # ---------------------------------------------------------
