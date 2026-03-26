@@ -51,11 +51,8 @@ def phase0_extract(state: WorkflowState) -> dict:
     missing = [k for k in ["who", "what", "why"] if not getattr(result, k)]
 
     return {
-        "who": result.who,
-        "what": result.what,
-        "why": result.why,
-        "ac_evidence": result.ac_evidence,
-        "missing_fields": missing,
+        "who": result.who, "what": result.what, "why": result.why,
+        "ac_evidence": result.ac_evidence, "missing_fields": missing,
         "current_phase": "phase1" if missing else "phase2"
     }
 
@@ -68,7 +65,7 @@ def phase1_lock(state: WorkflowState) -> dict:
     friendly_names = {
         "who": "Persona (e.g., User, Admin, Developer)",
         "what": "Feature/Action (What exactly needs to be built?)",
-        "why": "Business Value (Why is this feature important?)",
+        "why": "Business Value (Why is this feature important?)"
     }
 
     display_name = friendly_names.get(target, target)
@@ -98,29 +95,23 @@ def phase1_lock(state: WorkflowState) -> dict:
     if result.is_valid:
         new_missing = missing[1:]
         return {
-            target: result.normalized_value,
-            "missing_fields": new_missing,
-            "phase1_retries": 0,
-            "last_rejection_reason": None,
-            "user_injected_response": None,
-            "action_required": False,
-            "current_phase": "phase1" if new_missing else "phase2",
+            target: result.normalized_value, "missing_fields": new_missing,
+            "phase1_retries": 0, "last_rejection_reason": None,
+            "user_injected_response": None, "action_required": False,
+            "current_phase": "phase1" if new_missing else "phase2"
         }
 
     return {
         "phase1_retries": state.get("phase1_retries", 0) + 1,
         "last_rejection_reason": result.rejection_reason,
-        "user_injected_response": None,
-        "action_required": False,
+        "user_injected_response": None, "action_required": False,
     }
 
 def phase2_tech_lead(state: WorkflowState) -> dict:
     if state.get("pending_questions") or state.get("tech_notes"):
         return {}
 
-    sys_prompt = PROMPTS["tech_lead"]["system"].format(
-        what=state["what"], why=state["why"]
-    )
+    sys_prompt = PROMPTS["tech_lead"]["system"].format(what=state["what"], why=state["why"])
     result = llm.query(sys_prompt, "Review and generate technical questions.", TechQuestionsOutput)
 
     return {
@@ -143,7 +134,7 @@ def phase2_ask_questions(state: WorkflowState) -> dict:
         instruction = "\n(Note: This is optional. Type 'skip' to move to the next question)"
         return {
             "action_required": True,
-            "action_prompt": f"[Technical Lead – Question {current_idx}/{total}]:\n{current_q}{instruction}"
+            "action_prompt": f"[Technical Lead - Question {current_idx}/{total}]:\n{current_q}{instruction}"
         }
 
     user_answer = state["user_injected_response"].strip().lower()
@@ -153,12 +144,10 @@ def phase2_ask_questions(state: WorkflowState) -> dict:
             "pending_questions": questions[1:],
             "user_injected_response": None,
             "action_required": False,
-            "current_phase": "phase2_ask" if len(questions) > 1 else "phase3",
+            "current_phase": "phase2_ask" if len(questions) > 1 else "phase3"
         }
 
-    sys_prompt = PROMPTS["inline_validator"]["system"].format(
-        question=current_q, answer=user_answer
-    )
+    sys_prompt = PROMPTS["inline_validator"]["system"].format(question=current_q, answer=user_answer)
     result = llm.query(sys_prompt, f"Evaluate answer: {user_answer}", ValidatorOutput)
 
     new_notes = list(state.get("tech_notes", []))
@@ -179,21 +168,15 @@ def phase3_synthesize(state: WorkflowState) -> dict:
 
     tech_notes_str = "\n".join(state.get("tech_notes", []))
     sys_prompt = PROMPTS["agile_coach"]["system"].format(
-        who=state["who"],
-        what=state["what"],
-        why=state["why"],
-        tech_notes=tech_notes_str,
-        ac_evidence=state.get("ac_evidence", ""),
-        feedback=state.get("feedback_raw", ""),
+        who=state["who"], what=state["what"], why=state["why"], 
+        tech_notes=tech_notes_str, ac_evidence=state.get("ac_evidence", ""),
+        feedback=state.get("feedback_raw", "")
     )
 
     result = llm.query(sys_prompt, "Generate final Jira story.", FinalStoryOutput)
 
     return {
-        "final_story": result.story,
-        "current_phase": "phase3_feedback",
-        "feedback_raw": None,
-    }
+        "final_story": result.story, "current_phase": "phase3_feedback", "feedback_raw": None,}
 
 def phase3_feedback(state: WorkflowState) -> dict:
     retries = state.get("feedback_retries", 0)
