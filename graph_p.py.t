@@ -175,8 +175,7 @@ def phase3_synthesize(state: WorkflowState) -> dict:
 
     result = llm.query(sys_prompt, "Generate final Jira story.", FinalStoryOutput)
 
-    return {
-        "final_story": result.story, "current_phase": "phase3_feedback", "feedback_raw": None,}
+    return {"final_story": result.story, "current_phase": "phase3_feedback", "feedback_raw": None}
 
 def phase3_feedback(state: WorkflowState) -> dict:
     retries = state.get("feedback_retries", 0)
