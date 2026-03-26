@@ -21,7 +21,6 @@ from src.integrations.llm_client import get_llm_client
 
 _PROMPTS_FILE = Path(__file__).resolve().parents[1] / "domain" / "prompts" / "grooming_agent.yaml"
 
-
 def _load_prompts(file_path: Path) -> dict:
     if not file_path.exists():
         print(f"[INIT FATAL] Prompts file not found at: {file_path}")
@@ -35,12 +34,11 @@ def _load_prompts(file_path: Path) -> dict:
         print(f"[INIT FATAL] YAML Parse Error: {e}")
         sys.exit(1)
 
-
 PROMPTS = _load_prompts(_PROMPTS_FILE)
 llm = get_llm_client()
 
 # --------------------------------------------------
-# Phase 0 - Extract
+# Nodes
 # --------------------------------------------------
 
 def phase0_extract(state: WorkflowState) -> dict:
@@ -55,36 +53,28 @@ def phase0_extract(state: WorkflowState) -> dict:
     return {
         "who": result.who,
         "what": result.what,
-        "why": result.what,
+        "why": result.why,
         "ac_evidence": result.ac_evidence,
         "missing_fields": missing,
-        "current_phase": "phase1" if missing else "phase2",
+        "current_phase": "phase1" if missing else "phase2"
     }
-
-
-# --------------------------------------------------
-# Phase 1 - Lock / Clarify
-# --------------------------------------------------
 
 def phase1_lock(state: WorkflowState) -> dict:
     missing = state.get("missing_fields", [])
-
     if not missing:
         return {"current_phase": "phase2"}
 
     target = missing[0]
-
     friendly_names = {
         "who": "Persona (e.g., User, Admin, Developer)",
-        "what": "Feature/Action (what exactly needs to be built?)",
-        "why": "Business Value (why is this feature important?)",
+        "what": "Feature/Action (What exactly needs to be built?)",
+        "why": "Business Value (Why is this feature important?)",
     }
 
     display_name = friendly_names.get(target, target)
 
     if not state.get("user_injected_response"):
         retries = state.get("phase1_retries", 0)
-
         if retries >= 3:
             return {
                 "is_aborted": True,
@@ -93,7 +83,6 @@ def phase1_lock(state: WorkflowState) -> dict:
             }
 
         rejection = state.get("last_rejection_reason")
-
         prompt_msg = (
             f"[Invalid Input]: {rejection}\nPlease clarify the {display_name}:"
             if rejection
@@ -103,13 +92,11 @@ def phase1_lock(state: WorkflowState) -> dict:
         return {"action_required": True, "action_prompt": prompt_msg}
 
     user_val = state["user_injected_response"]
-
     sys_prompt = PROMPTS["validator"]["system"].format(field=target)
     result = llm.query(sys_prompt, f"User provided: {user_val}", ValidatorOutput)
 
     if result.is_valid:
         new_missing = missing[1:]
-
         return {
             target: result.normalized_value,
             "missing_fields": new_missing,
@@ -127,11 +114,6 @@ def phase1_lock(state: WorkflowState) -> dict:
         "action_required": False,
     }
 
-
-# --------------------------------------------------
-# Phase 2 - Tech Lead
-# --------------------------------------------------
-
 def phase2_tech_lead(state: WorkflowState) -> dict:
     if state.get("pending_questions") or state.get("tech_notes"):
         return {}
@@ -139,15 +121,13 @@ def phase2_tech_lead(state: WorkflowState) -> dict:
     sys_prompt = PROMPTS["tech_lead"]["system"].format(
         what=state["what"], why=state["why"]
     )
-
     result = llm.query(sys_prompt, "Review and generate technical questions.", TechQuestionsOutput)
 
     return {
         "pending_questions": result.questions,
         "total_tech_questions": len(result.questions),
-        "current_phase": "phase2_ask",
+        "current_phase": "phase2_ask"
     }
-
 
 def phase2_ask_questions(state: WorkflowState) -> dict:
     questions = state.get("pending_questions", [])
@@ -161,10 +141,9 @@ def phase2_ask_questions(state: WorkflowState) -> dict:
 
     if not state.get("user_injected_response"):
         instruction = "\n(Note: This is optional. Type 'skip' to move to the next question)"
-
         return {
             "action_required": True,
-            "action_prompt": f"[Technical Lead - Question {current_idx}/{total}]:\n{current_q}{instruction}",
+            "action_prompt": f"[Technical Lead – Question {current_idx}/{total}]:\n{current_q}{instruction}"
         }
 
     user_answer = state["user_injected_response"].strip().lower()
@@ -178,18 +157,13 @@ def phase2_ask_questions(state: WorkflowState) -> dict:
         }
 
     sys_prompt = PROMPTS["inline_validator"]["system"].format(
-        question=current_q,
-        answer=user_answer,
+        question=current_q, answer=user_answer
     )
-
     result = llm.query(sys_prompt, f"Evaluate answer: {user_answer}", ValidatorOutput)
 
     new_notes = list(state.get("tech_notes", []))
-
     if result.is_valid and result.normalized_value:
-        new_notes.append(
-            f"Constraint derived from '{current_q}': {result.normalized_value}"
-        )
+        new_notes.append(f"Constraint derived from '{current_q}': {result.normalized_value}")
 
     return {
         "pending_questions": questions[1:],
@@ -199,17 +173,11 @@ def phase2_ask_questions(state: WorkflowState) -> dict:
         "current_phase": "phase2_ask" if len(questions) > 1 else "phase3",
     }
 
-
-# --------------------------------------------------
-# Phase 3 - Synthesis
-# --------------------------------------------------
-
 def phase3_synthesize(state: WorkflowState) -> dict:
     if state.get("final_story") and not state.get("feedback_raw"):
         return {}
 
     tech_notes_str = "\n".join(state.get("tech_notes", []))
-
     sys_prompt = PROMPTS["agile_coach"]["system"].format(
         who=state["who"],
         what=state["what"],
@@ -226,7 +194,6 @@ def phase3_synthesize(state: WorkflowState) -> dict:
         "current_phase": "phase3_feedback",
         "feedback_raw": None,
     }
-
 
 def phase3_feedback(state: WorkflowState) -> dict:
     retries = state.get("feedback_retries", 0)
@@ -247,14 +214,12 @@ def phase3_feedback(state: WorkflowState) -> dict:
         "current_phase": "phase3",
     }
 
-
 # --------------------------------------------------
-# Routing
+# Graph Compilation
 # --------------------------------------------------
 
 def _route_start(state: WorkflowState) -> str:
     phase = state.get("current_phase", "phase0")
-
     routes = {
         "phase0": "phase0_extract",
         "phase1": "phase1_lock",
@@ -263,5 +228,43 @@ def _route_start(state: WorkflowState) -> str:
         "phase3": "phase3_synthesize",
         "phase3_feedback": "phase3_feedback",
     }
-
     return routes.get(phase, "phase0_extract")
+
+builder = StateGraph(WorkflowState)
+
+builder.add_node("phase0_extract", phase0_extract)
+builder.add_node("phase1_lock", phase1_lock)
+builder.add_node("phase2_tech_lead", phase2_tech_lead)
+builder.add_node("phase2_ask_questions", phase2_ask_questions)
+builder.add_node("phase3_synthesize", phase3_synthesize)
+builder.add_node("phase3_feedback", phase3_feedback)
+
+builder.add_conditional_edges(START, _route_start)
+
+builder.add_conditional_edges(
+    "phase0_extract",
+    lambda x: "phase1_lock" if x.get("current_phase") == "phase1" else "phase2_tech_lead"
+)
+
+builder.add_conditional_edges(
+    "phase1_lock",
+    lambda x: END if x.get("action_required") or x.get("is_aborted")
+    else ("phase1_lock" if x.get("current_phase") == "phase1" else "phase2_tech_lead")
+)
+
+builder.add_edge("phase2_tech_lead", "phase2_ask_questions")
+
+builder.add_conditional_edges(
+    "phase2_ask_questions",
+    lambda x: END if x.get("action_required")
+    else ("phase2_ask_questions" if x.get("current_phase") == "phase2_ask" else "phase3_synthesize")
+)
+
+builder.add_edge("phase3_synthesize", "phase3_feedback")
+
+builder.add_conditional_edges(
+    "phase3_feedback",
+    lambda x: END if x.get("action_required") or x.get("is_complete") else "phase3_synthesize"
+)
+
+graph = builder.compile()
