@@ -21,7 +21,7 @@ STATIC_DIR BASE_DIR / "static"
 async def lifespan (app: FastAPI):
     from sqlalchemy import text
     from src.config.database import get_engine
-    engine get_engine()
+    engine = get_engine()
     async with engine.connect() as conn:
         await conn.execute(text("SELECT 1"))
     yield
