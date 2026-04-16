@@ -27,15 +27,15 @@ async def lifespan (app: FastAPI):
     yield
     #shutdown: close DB engine and all pooled httpx clients cleanly
     await engine.dispose()
-    from src.integrations.llm_client import_pool
-    for client in pool.values():
+    from src.integrations.llm_client import _pool
+    for client in _pool.values():
         client.close()
 
 
 
 
 def create_app() -> FastAPI:
-    app FastAPI(lifespan lifespan)
+    app FastAPI(lifespan=lifespan)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
