@@ -12,30 +12,27 @@ from src.api.routers.static_pages import router as static_pages_router
 from src.api.routers.user import router as user_router
 
 
-BASE_DIR = Path(_file_).resolve().parents[1]
-STATIC_DIR BASE_DIR / "static"
-
+BASE_DIR = Path(__file__).resolve().parents[1]
+STATIC_DIR = BASE_DIR / "static"
 
 
 @asynccontextmanager
-async def lifespan (app: FastAPI):
+async def lifespan(app: FastAPI):
     from sqlalchemy import text
     from src.config.database import get_engine
     engine = get_engine()
     async with engine.connect() as conn:
         await conn.execute(text("SELECT 1"))
     yield
-    #shutdown: close DB engine and all pooled httpx clients cleanly
+    # shutdown: close DB engine and all pooled httpx clients cleanly
     await engine.dispose()
     from src.integrations.llm_client import _pool
     for client in _pool.values():
         client.close()
 
 
-
-
 def create_app() -> FastAPI:
-    app FastAPI(lifespan=lifespan)
+    app = FastAPI(lifespan=lifespan)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
